@@ -26,7 +26,7 @@ ACTION = app
 # 得到的静态库为: libXXX.a
 # 得到的动态库为: libXXX.so
 # 得到的可执行文件为: XXX
-TARGET = liker
+TARGET = Liker
 
 #编译器 
 CC = gcc 
@@ -58,7 +58,7 @@ SUB_SRC_DIR =
 #最终目标被复制到指定放置的路径，可以指定多个路径
 #当前目录下会一直保存一份目标文件
 #例:TARGET_DIR1 TARGET_DIR2
-TARGET_DIR = 
+TARGET_DIR = ./bin/
 
 #文件导出
 #将$(EXPORT_FILE)中指定的文件复制到$(EXPORT_FILE)目录中
@@ -410,6 +410,7 @@ $(static_target):$(all_obj)
 	for d in $(SUB_MAKE_DIR);do make -C $$d; done;
 	$(AR) rcvs $@ $^
 	for i in $(TARGET_DIR);do if [ -d $$i ];then cp $@ $$i;fi;done
+	rm $@
 
 #动态库
 dynamic : $(dynamic_target) 
@@ -417,6 +418,7 @@ $(dynamic_target): $(all_obj)
 	for d in $(SUB_MAKE_DIR);do make -C $$d; done;
 	$(CC) -o $@ $^ $(ldflags) -shared
 	for i in $(TARGET_DIR);do if [ -d $$i ];then cp $@ $$i;fi;done
+	rm $@
 
 #应用程序
 app : $(TARGET)
@@ -424,6 +426,7 @@ $(TARGET): $(all_obj)
 	for d in $(SUB_MAKE_DIR);do make -C $$d; done;
 	$(CC) -o $@ $^ $(ldflags) 
 	for i in $(TARGET_DIR);do if [ -d $$i ];then cp $@ $$i;fi;done
+	rm $@
 
 clean:
 	rm -f $(TARGET) $(static_target) $(dynamic_target)

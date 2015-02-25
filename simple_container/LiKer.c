@@ -177,7 +177,7 @@ int main(int argc, char* const argv[])
         retcode = EXIT_FAILURE;
         goto EXIT;
     }
-    fprintf(stdout,"Finished!");
+    fprintf(stdout,"Finished!\n");
 
 EXIT:
     if(ct != NULL){
