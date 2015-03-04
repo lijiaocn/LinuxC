@@ -13,11 +13,13 @@
 #include <dirent.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <sys/mount.h>
 
 #define VERSION_MAJOR  0
 #define VERSION_MINOR  1
 #define ContainerNameSize 10
 #define ContainerRootfsPathSize 20
+#define ContainerProcPathSize (ContainerRootfsPathSize+5)
 #define EXIT_FAILURE 1
 #define EXIT_SUCCESS 0
 #define DEFAULT_STACK_SIZE (1024*1024*100)
@@ -26,7 +28,8 @@ typedef struct Container{
 	uuid_t uuid;
 	char name[ContainerNameSize];
 	char rootfs[ContainerRootfsPathSize];
-	int stacksize;
+	char proc[ContainerProcPathSize];
+	int  stacksize;
 	char stack[0];
 }Container;
 
@@ -41,6 +44,26 @@ void usage(char *argv0 ){
 	printf("\t -h, --help:     display the user manual\n");
 	printf("\t -n, --name:     set the cotainer name, if you don't set ,it will be NULL\n");
 	printf("\t -s, --stack:    container's stack size\n");
+}
+
+int checkRootfs(char *rootfs){
+	assert(rootfs != NULL);
+
+	if(opendir(rootfs) == NULL){
+	    syslog(LOG_ERR,"%s %s %s %d\n",strerror(errno), __FILE__,__func__,__LINE__);
+	    return -1;
+	}
+
+	char proc[ContainerRootfsPathSize+5];
+	proc[0]='\0';
+	strncat(proc, rootfs, ContainerRootfsPathSize+5);
+	strncat(proc, "/proc", ContainerRootfsPathSize+5);
+
+	if(opendir(proc) == NULL){
+	    syslog(LOG_ERR,"No dir 'proc' in rootfs %s %s %s %d\n",strerror(errno), __FILE__,__func__,__LINE__);
+	    return -1;
+	}
+	return 0;
 }
 
 Container * newContainer(char *name, char *rootfs, int stacksize){
@@ -62,8 +85,8 @@ Container * newContainer(char *name, char *rootfs, int stacksize){
 	    return NULL;
 	}
 
-	if(opendir(rootfs) == NULL){
-	    syslog(LOG_ERR,"%s %s %s %d\n",strerror(errno), __FILE__,__func__,__LINE__);
+	if(checkRootfs(rootfs) != 0){
+	    syslog(LOG_ERR,"invalid rootfs %s %s %s %d\n",strerror(errno), __FILE__,__func__,__LINE__);
 	    return NULL;
 	}
 
@@ -81,23 +104,38 @@ Container * newContainer(char *name, char *rootfs, int stacksize){
 	    syslog(LOG_ERR,"uuid generate fail %s %s %s %d\n",strerror(errno), __FILE__,__func__,__LINE__);
 	    return NULL;
 	}
-	snprintf(ct->name,strlen(name),"%s",name);
-	snprintf(ct->rootfs,strlen(rootfs),"%s",rootfs);
+	snprintf(ct->name, ContainerNameSize, "%s", name);
+	snprintf(ct->rootfs, ContainerRootfsPathSize, "%s", rootfs);
+	snprintf(ct->proc, ContainerProcPathSize, "%s/proc", rootfs);
 	ct->stacksize = stacksize;
 	return ct;
 }
 
 int startContainer(void *arg){
 	Container *ct = arg;
-
+	if(mount("proc", ct->proc, "proc", 0, NULL) == -1){
+		syslog(LOG_ERR," %s %s %s %d\n",strerror(errno),__FILE__,__func__,__LINE__);
+		return -1;
+	}
 	execlp("chroot", "chroot",ct->rootfs, (char *)NULL);
 	syslog(LOG_ERR," %s %s %s %d\n",strerror(errno),__FILE__,__func__,__LINE__);
+	
 	return 0;
 }
 
+int stopContainer(Container *ct){
+
+	if(umount(ct->proc) == -1){
+		syslog(LOG_ERR," %s %s %s %d\n",strerror(errno),__FILE__,__func__,__LINE__);
+		return -1;
+	}
+	return 0;
+}
+
+
 void init(int args, char* const argv[]){
-	//openlog(argv[0] , LOG_PERROR|LOG_PID , LOG_USER);
-	openlog(argv[0] , LOG_PID|LOG_NDELAY , LOG_USER);
+	openlog(argv[0] , LOG_PERROR|LOG_PID|LOG_NDELAY , LOG_USER);
+	//openlog(argv[0] , LOG_PID|LOG_NDELAY , LOG_USER);
 	syslog(LOG_INFO,"Start");
 }
 
@@ -177,6 +215,7 @@ int main(int argc, char* const argv[])
 	    retcode = EXIT_FAILURE;
 	    goto EXIT;
 	}
+	stopContainer(ct);
 	fprintf(stdout,"Finished!\n");
 
 EXIT:
